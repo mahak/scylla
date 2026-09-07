@@ -117,6 +117,13 @@ public:
     // state machine implementations shouldn't care whether an entry was applied via
     // `state_machine::apply` or via a snapshot load.
     //
+    // When forwarding is disabled, `add_entry` guarantees that entries will be appended
+    // to the log in the same order in which the `add_entry` calls were issued.
+    // More precisely, if `add_entry(A)` is called before `add_entry(B)` - without
+    // waiting for A's future before starting the call for B - the command A
+    // will be placed in the log before B (assuming that both are successfully
+    // appended).
+    //
     // Exceptions:
     // raft::commit_status_unknown
     //     Thrown if the leader has changed and the log entry has either
