@@ -801,9 +801,19 @@ future<> server_impl::add_entry(command command, wait_type type, seastar::abort_
         {
             // Taken before the first await which can reorder callers, released before
             // waiting for the entry. See _add_entry_admission.
-            auto admission = as
-                    ? co_await get_units(_add_entry_admission, 1, *as)
-                    : co_await get_units(_add_entry_admission, 1);
+            auto f_admission = co_await coroutine::as_future(as
+                    ? get_units(_add_entry_admission, 1, *as)
+                    : get_units(_add_entry_admission, 1));
+            if (f_admission.failed()) {
+                auto eptr = f_admission.get_exception();
+                if (try_catch<seastar::abort_requested_exception>(eptr) != nullptr) {
+                    co_await coroutine::return_exception(raft::request_aborted(format(
+                            "Aborted while waiting for add_entry admission on server {}, last committed entry: {}",
+                            _id, _fsm->commit_idx())));
+                } else {
+                    co_await coroutine::return_exception_ptr(eptr);
+                }
+            }
             eid = co_await add_entry_on_leader(std::move(command), as);
         }
         co_await utils::get_local_injector().inject("block_raft_add_entry_before_wait_for_entry",
